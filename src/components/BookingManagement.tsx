@@ -90,9 +90,9 @@ const BookingManagement: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (booking: Booking, newStatus: 'fulfilled' | 'cancelled') => {
+  const handleStatusChange = async (id: string, newStatus: 'fulfilled' | 'cancelled') => {
     try {
-      await update(booking.id, { status: newStatus });
+      await update(id, { status: newStatus });
       toast.success(`Booking ${newStatus} successfully`);
     } catch (error) {
       toast.error(`Failed to ${newStatus} booking`);
@@ -272,14 +272,14 @@ const BookingManagement: React.FC = () => {
                       {booking.status === 'pending' && (
                         <>
                           <button
-                            onClick={() => handleStatusChange(booking, 'fulfilled')}
+                            onClick={() => handleStatusChange(booking.id, 'fulfilled')}
                             className="text-green-600 hover:text-green-900"
                             title="Mark as Fulfilled"
                           >
                             <CheckCircle className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleStatusChange(booking, 'cancelled')}
+                            onClick={() => handleStatusChange(booking.id, 'cancelled')}
                             className="text-red-600 hover:text-red-900"
                             title="Cancel Booking"
                           >
