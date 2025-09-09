@@ -47,7 +47,7 @@ const StockManagement: React.FC = () => {
         remainingWeight,
         remainingValue,
       };
-    }).filter(item => item.remainingWeight > 0);
+    });
   };
 
   const stockItems = getStockByPurchase();

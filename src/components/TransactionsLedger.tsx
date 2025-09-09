@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
-import { Calendar, DollarSign, TrendingUp, TrendingDown, Filter, Download } from 'lucide-react';
+import { Calendar, DollarSign, TrendingUp, TrendingDown, Filter, Download, ShoppingCart } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
-import { Transaction, Purchase, Sale, Seller, Customer } from '../types';
+import { Transaction, Purchase, Sale } from '../types';
 import { format } from 'date-fns';
 
 const TransactionsLedger: React.FC = () => {
   const { data: purchases } = useFirestore<Purchase>('purchases');
   const { data: sales } = useFirestore<Sale>('sales');
-  const { data: sellers } = useFirestore<Seller>('sellers');
-  const { data: customers } = useFirestore<Customer>('customers');
   
   const [filterType, setFilterType] = useState<'all' | 'purchase' | 'sale' | 'payment'>('all');
   const [dateRange, setDateRange] = useState({
@@ -16,66 +14,36 @@ const TransactionsLedger: React.FC = () => {
     to: ''
   });
 
-  // Generate transactions from purchases and sales
+  // Generate simplified transactions from purchases and sales
   const generateTransactions = (): Transaction[] => {
     const transactions: Transaction[] = [];
 
-    // Add purchase transactions
+    // Add purchase transactions (single entry)
     purchases.forEach(purchase => {
-      const seller = sellers.find(s => s.id === purchase.sellerId);
       transactions.push({
         id: `purchase-${purchase.id}`,
         type: 'purchase',
         date: purchase.date,
-        amount: purchase.totalCost,
-        description: `Purchase from ${purchase.sellerName} - ${purchase.weight}g @ ₹${purchase.ratePerGram}/g`,
+        amount: purchase.totalCost - purchase.amountPaid, // Only show due amount
+        description: `Purchase from ${purchase.sellerName} - ${purchase.weight}g @ ₹${purchase.ratePerGram}/g (Due: ₹${purchase.amountDue})`,
         relatedId: purchase.sellerId,
         relatedName: purchase.sellerName,
         createdAt: purchase.createdAt
       });
-
-      // Add payment transaction if amount was paid
-      if (purchase.amountPaid > 0) {
-        transactions.push({
-          id: `payment-seller-${purchase.id}`,
-          type: 'payment_to_seller',
-          date: purchase.date,
-          amount: purchase.amountPaid,
-          description: `Payment to ${purchase.sellerName} for purchase`,
-          relatedId: purchase.sellerId,
-          relatedName: purchase.sellerName,
-          createdAt: purchase.createdAt
-        });
-      }
     });
 
-    // Add sale transactions
+    // Add sale transactions (single entry)
     sales.forEach(sale => {
-      const customer = customers.find(c => c.id === sale.customerId);
       transactions.push({
         id: `sale-${sale.id}`,
         type: 'sale',
         date: sale.date,
-        amount: sale.totalSaleAmount,
-        description: `Sale to ${sale.customerName} - ${sale.weight}g @ ₹${sale.ratePerGram}/g`,
+        amount: sale.amountReceived, // Only show received amount
+        description: `Sale to ${sale.customerName} - ${sale.weight}g @ ₹${sale.ratePerGram}/g (Pending: ₹${sale.amountPending})`,
         relatedId: sale.customerId,
         relatedName: sale.customerName,
         createdAt: sale.createdAt
       });
-
-      // Add payment transaction if amount was received
-      if (sale.amountReceived > 0) {
-        transactions.push({
-          id: `payment-customer-${sale.id}`,
-          type: 'payment_from_customer',
-          date: sale.date,
-          amount: sale.amountReceived,
-          description: `Payment from ${sale.customerName} for sale`,
-          relatedId: sale.customerId,
-          relatedName: sale.customerName,
-          createdAt: sale.createdAt
-        });
-      }
     });
 
     return transactions.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -87,7 +55,6 @@ const TransactionsLedger: React.FC = () => {
     if (filterType !== 'all') {
       if (filterType === 'purchase' && transaction.type !== 'purchase') return false;
       if (filterType === 'sale' && transaction.type !== 'sale') return false;
-      if (filterType === 'payment' && !transaction.type.includes('payment')) return false;
     }
 
     if (dateRange.from && transaction.date < new Date(dateRange.from)) return false;
@@ -99,9 +66,9 @@ const TransactionsLedger: React.FC = () => {
   const calculateRunningBalance = () => {
     let balance = 0;
     return filteredTransactions.map(transaction => {
-      if (transaction.type === 'sale' || transaction.type === 'payment_from_customer') {
+      if (transaction.type === 'sale') {
         balance += transaction.amount;
-      } else {
+      } else if (transaction.type === 'purchase') {
         balance -= transaction.amount;
       }
       return { ...transaction, balance };
@@ -113,22 +80,16 @@ const TransactionsLedger: React.FC = () => {
   const summary = {
     totalPurchases: transactions.filter(t => t.type === 'purchase').reduce((sum, t) => sum + t.amount, 0),
     totalSales: transactions.filter(t => t.type === 'sale').reduce((sum, t) => sum + t.amount, 0),
-    totalPaymentsToSellers: transactions.filter(t => t.type === 'payment_to_seller').reduce((sum, t) => sum + t.amount, 0),
-    totalPaymentsFromCustomers: transactions.filter(t => t.type === 'payment_from_customer').reduce((sum, t) => sum + t.amount, 0),
   };
 
-  const netProfit = summary.totalSales - summary.totalPurchases;
+  const netCashFlow = summary.totalSales - summary.totalPurchases;
 
   const getTransactionIcon = (type: string) => {
     switch (type) {
       case 'purchase':
-        return <TrendingDown className="w-4 h-4 text-red-500" />;
+        return <ShoppingCart className="w-4 h-4 text-red-500" />;
       case 'sale':
         return <TrendingUp className="w-4 h-4 text-green-500" />;
-      case 'payment_to_seller':
-        return <DollarSign className="w-4 h-4 text-orange-500" />;
-      case 'payment_from_customer':
-        return <DollarSign className="w-4 h-4 text-blue-500" />;
       default:
         return <DollarSign className="w-4 h-4 text-gray-500" />;
     }
@@ -140,10 +101,6 @@ const TransactionsLedger: React.FC = () => {
         return 'text-red-600';
       case 'sale':
         return 'text-green-600';
-      case 'payment_to_seller':
-        return 'text-orange-600';
-      case 'payment_from_customer':
-        return 'text-blue-600';
       default:
         return 'text-gray-600';
     }
@@ -164,16 +121,16 @@ const TransactionsLedger: React.FC = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Purchases</p>
+              <p className="text-sm font-medium text-gray-600">Purchase Dues</p>
               <p className="text-2xl font-bold text-red-600">₹{summary.totalPurchases.toLocaleString()}</p>
             </div>
-            <TrendingDown className="w-8 h-8 text-red-500" />
+            <ShoppingCart className="w-8 h-8 text-red-500" />
           </div>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Sales</p>
+              <p className="text-sm font-medium text-gray-600">Sales Received</p>
               <p className="text-2xl font-bold text-green-600">₹{summary.totalSales.toLocaleString()}</p>
             </div>
             <TrendingUp className="w-8 h-8 text-green-500" />
@@ -182,12 +139,12 @@ const TransactionsLedger: React.FC = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Net Profit/Loss</p>
-              <p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                ₹{netProfit.toLocaleString()}
+              <p className="text-sm font-medium text-gray-600">Net Cash Flow</p>
+              <p className={`text-2xl font-bold ${netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ₹{netCashFlow.toLocaleString()}
               </p>
             </div>
-            <DollarSign className={`w-8 h-8 ${netProfit >= 0 ? 'text-green-500' : 'text-red-500'}`} />
+            <DollarSign className={`w-8 h-8 ${netCashFlow >= 0 ? 'text-green-500' : 'text-red-500'}`} />
           </div>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -216,7 +173,6 @@ const TransactionsLedger: React.FC = () => {
             <option value="all">All Transactions</option>
             <option value="purchase">Purchases Only</option>
             <option value="sale">Sales Only</option>
-            <option value="payment">Payments Only</option>
           </select>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-700">From:</span>
@@ -298,7 +254,7 @@ const TransactionsLedger: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <span className={getTransactionColor(transaction.type)}>
-                      {transaction.type === 'purchase' || transaction.type === 'payment_to_seller' ? '-' : '+'}
+                      {transaction.type === 'purchase' ? '-' : '+'}
                       ₹{transaction.amount.toLocaleString()}
                     </span>
                   </td>

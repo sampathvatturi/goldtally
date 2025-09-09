@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Plus, Edit, Trash2, User } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
-import { Sale, Customer } from '../types';
+import { Sale, Customer, Purchase } from '../types';
 import SearchableSelect from './SearchableSelect';
 import toast from 'react-hot-toast';
 
 const SalesManagement: React.FC = () => {
   const { data: sales, add, update, remove } = useFirestore<Sale>('sales');
   const { data: customers } = useFirestore<Customer>('customers');
+  const { data: purchases } = useFirestore<Purchase>('purchases');
   const [showForm, setShowForm] = useState(false);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
@@ -15,6 +16,7 @@ const SalesManagement: React.FC = () => {
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     customerId: '',
+    linkedPurchaseId: '',
     weight: '',
     ratePerGram: '',
     amountReceived: '',
@@ -34,6 +36,7 @@ const SalesManagement: React.FC = () => {
     setFormData({
       date: new Date().toISOString().split('T')[0],
       customerId: '',
+      linkedPurchaseId: '',
       weight: '',
       ratePerGram: '',
       amountReceived: '',
@@ -82,6 +85,17 @@ const SalesManagement: React.FC = () => {
       const amountReceived = parseFloat(formData.amountReceived) || 0;
       const amountPending = totalSaleAmount - amountReceived;
 
+      // Calculate profit if linked to purchase
+      let purchaseRate = 0;
+      let profitPerGram = 0;
+      if (formData.linkedPurchaseId) {
+        const linkedPurchase = purchases.find(p => p.id === formData.linkedPurchaseId);
+        if (linkedPurchase) {
+          purchaseRate = linkedPurchase.ratePerGram;
+          profitPerGram = ratePerGram - purchaseRate;
+        }
+      }
+
       const saleData = {
         date: new Date(formData.date),
         customerId: formData.customerId,
@@ -92,6 +106,9 @@ const SalesManagement: React.FC = () => {
         amountReceived,
         amountPending,
         status: amountPending === 0 ? 'paid' : amountReceived > 0 ? 'partial' : 'pending',
+        linkedPurchaseId: formData.linkedPurchaseId || undefined,
+        purchaseRate: purchaseRate || undefined,
+        profitPerGram: profitPerGram || undefined,
         notes: formData.notes,
       };
 
@@ -112,6 +129,7 @@ const SalesManagement: React.FC = () => {
     setFormData({
       date: sale.date.toISOString().split('T')[0],
       customerId: sale.customerId,
+      linkedPurchaseId: sale.linkedPurchaseId || '',
       weight: sale.weight.toString(),
       ratePerGram: sale.ratePerGram.toString(),
       amountReceived: sale.amountReceived.toString(),
@@ -131,6 +149,25 @@ const SalesManagement: React.FC = () => {
       }
     }
   };
+
+  // Get available stock from purchases
+  const getAvailableStock = () => {
+    return purchases.map(purchase => {
+      const soldFromThisPurchase = sales
+        .filter(sale => sale.linkedPurchaseId === purchase.id)
+        .reduce((sum, sale) => sum + sale.weight, 0);
+      
+      const remainingWeight = purchase.weight - soldFromThisPurchase;
+      
+      return {
+        ...purchase,
+        remainingWeight,
+        displayText: `${purchase.sellerName} - ${remainingWeight.toFixed(2)}g @ ₹${purchase.ratePerGram}/g (${purchase.date.toLocaleDateString()})`
+      };
+    }).filter(item => item.remainingWeight > 0);
+  };
+
+  const availableStock = getAvailableStock();
 
   return (
     <div className="space-y-6">
@@ -179,6 +216,24 @@ const SalesManagement: React.FC = () => {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Stock (Optional)</label>
+                <select
+                  value={formData.linkedPurchaseId}
+                  onChange={(e) => setFormData({ ...formData, linkedPurchaseId: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                >
+                  <option value="">Select from available stock</option>
+                  {availableStock.map((stock) => (
+                    <option key={stock.id} value={stock.id}>
+                      {stock.displayText}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select stock to track exact profit/loss and monitor sold weight
+                </p>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Weight (grams) *</label>
                 <input
                   type="number"
@@ -209,6 +264,37 @@ const SalesManagement: React.FC = () => {
                       ₹{(parseFloat(formData.weight) * parseFloat(formData.ratePerGram)).toLocaleString()}
                     </span>
                   </p>
+                  {formData.linkedPurchaseId && (
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      {(() => {
+                        const linkedPurchase = purchases.find(p => p.id === formData.linkedPurchaseId);
+                        if (linkedPurchase) {
+                          const saleRate = parseFloat(formData.ratePerGram);
+                          const purchaseRate = linkedPurchase.ratePerGram;
+                          const profitPerGram = saleRate - purchaseRate;
+                          const totalProfit = profitPerGram * parseFloat(formData.weight);
+                          return (
+                            <>
+                              <p className="text-sm text-gray-600">
+                                Purchase Rate: <span className="font-medium">₹{purchaseRate}/g</span>
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                Profit per gram: <span className={`font-medium ${profitPerGram >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  ₹{profitPerGram.toFixed(2)}/g
+                                </span>
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                Total Profit: <span className={`font-medium ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  ₹{totalProfit.toLocaleString()}
+                                </span>
+                              </p>
+                            </>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
                 </div>
               )}
               <div>
@@ -329,10 +415,16 @@ const SalesManagement: React.FC = () => {
                   Customer
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Stock Source
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Weight
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Rate/g
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Profit/g
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Total Amount
@@ -363,11 +455,30 @@ const SalesManagement: React.FC = () => {
                       <span className="text-sm font-medium text-gray-900">{sale.customerName}</span>
                     </div>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {sale.linkedPurchaseId ? (
+                      (() => {
+                        const linkedPurchase = purchases.find(p => p.id === sale.linkedPurchaseId);
+                        return linkedPurchase ? linkedPurchase.sellerName : 'Unknown';
+                      })()
+                    ) : (
+                      'Not linked'
+                    )}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {sale.weight}g
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     ₹{sale.ratePerGram}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    {sale.profitPerGram ? (
+                      <span className={sale.profitPerGram >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        ₹{sale.profitPerGram.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     ₹{sale.totalSaleAmount.toLocaleString()}

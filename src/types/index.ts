@@ -53,7 +53,9 @@ export interface Sale {
   amountReceived: number;
   amountPending: number;
   status: 'pending' | 'partial' | 'paid';
-  linkedPurchaseId?: string;
+  linkedPurchaseId?: string; // Link to purchase for P&L tracking
+  purchaseRate?: number; // Purchase rate for P&L calculation
+  profitPerGram?: number; // Calculated profit per gram
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
