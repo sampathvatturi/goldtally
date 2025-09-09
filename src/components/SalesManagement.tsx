@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Plus, Edit, Trash2, User } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import { Sale, Customer } from '../types';
+import SearchableSelect from './SearchableSelect';
 import toast from 'react-hot-toast';
 
 const SalesManagement: React.FC = () => {
   const { data: sales, add, update, remove } = useFirestore<Sale>('sales');
   const { data: customers } = useFirestore<Customer>('customers');
   const [showForm, setShowForm] = useState(false);
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
 
   const [formData, setFormData] = useState({
@@ -18,6 +20,15 @@ const SalesManagement: React.FC = () => {
     amountReceived: '',
     notes: '',
   });
+
+  const [customerFormData, setCustomerFormData] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    email: '',
+  });
+
+  const { add: addCustomer } = useFirestore<Customer>('customers');
 
   const resetForm = () => {
     setFormData({
@@ -30,6 +41,30 @@ const SalesManagement: React.FC = () => {
     });
     setEditingSale(null);
     setShowForm(false);
+  };
+
+  const resetCustomerForm = () => {
+    setCustomerFormData({ name: '', phone: '', address: '', email: '' });
+    setShowCustomerForm(false);
+  };
+
+  const handleAddCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const newCustomer = await addCustomer({
+        ...customerFormData,
+        totalBooked: 0,
+        totalPurchased: 0,
+        totalReceived: 0,
+        totalPending: 0,
+      });
+      toast.success('Customer added successfully');
+      resetCustomerForm();
+      // Auto-select the new customer
+      setFormData({ ...formData, customerId: newCustomer.id });
+    } catch (error) {
+      toast.error('Failed to add customer');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -130,19 +165,18 @@ const SalesManagement: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label>
-                <select
-                  required
+                <SearchableSelect
+                  options={customers.map(customer => ({
+                    id: customer.id,
+                    name: customer.name,
+                    phone: customer.phone
+                  }))}
                   value={formData.customerId}
-                  onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                >
-                  <option value="">Select Customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setFormData({ ...formData, customerId: value })}
+                  placeholder="Select Customer"
+                  onAddNew={() => setShowCustomerForm(true)}
+                  addNewLabel="Add New Customer"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Weight (grams) *</label>
@@ -207,6 +241,71 @@ const SalesManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={resetForm}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Customer Form Modal */}
+      {showCustomerForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Add New Customer</h3>
+            <form onSubmit={handleAddCustomer} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={customerFormData.name}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                <input
+                  type="tel"
+                  required
+                  value={customerFormData.phone}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
+                <textarea
+                  required
+                  value={customerFormData.address}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, address: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={customerFormData.email}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 bg-yellow-600 text-white py-2 rounded-lg hover:bg-yellow-700"
+                >
+                  Add Customer
+                </button>
+                <button
+                  type="button"
+                  onClick={resetCustomerForm}
                   className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
                 >
                   Cancel

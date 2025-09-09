@@ -8,6 +8,7 @@ import PurchaseManagement from './components/PurchaseManagement';
 import SalesManagement from './components/SalesManagement';
 import BookingManagement from './components/BookingManagement';
 import StockManagement from './components/StockManagement';
+import TransactionsLedger from './components/TransactionsLedger';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -28,6 +29,8 @@ function App() {
         return <BookingManagement />;
       case 'stock':
         return <StockManagement />;
+      case 'transactions':
+        return <TransactionsLedger />;
       default:
         return <Dashboard />;
     }

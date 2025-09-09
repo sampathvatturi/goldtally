@@ -6,6 +6,7 @@ import {
   Package, 
   BookOpen, 
   TrendingUp,
+  Receipt,
   Menu,
   X
 } from 'lucide-react';
@@ -27,6 +28,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageChange }) 
     { id: 'sales', label: 'Sales', icon: TrendingUp },
     { id: 'bookings', label: 'Bookings', icon: BookOpen },
     { id: 'stock', label: 'Stock', icon: Package },
+    { id: 'transactions', label: 'Transactions', icon: Receipt },
   ];
 
   return (

@@ -89,5 +89,7 @@ export interface Transaction {
   amount: number;
   description: string;
   relatedId: string;
+  relatedName: string;
+  balance?: number;
   createdAt: Date;
 }

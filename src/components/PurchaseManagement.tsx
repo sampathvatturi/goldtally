@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Plus, Edit, Trash2, User } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import { Purchase, Seller } from '../types';
+import SearchableSelect from './SearchableSelect';
 import toast from 'react-hot-toast';
 
 const PurchaseManagement: React.FC = () => {
   const { data: purchases, add, update, remove } = useFirestore<Purchase>('purchases');
   const { data: sellers } = useFirestore<Seller>('sellers');
   const [showForm, setShowForm] = useState(false);
+  const [showSellerForm, setShowSellerForm] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
 
   const [formData, setFormData] = useState({
@@ -19,6 +21,15 @@ const PurchaseManagement: React.FC = () => {
     amountPaid: '',
     notes: '',
   });
+
+  const [sellerFormData, setSellerFormData] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    email: '',
+  });
+
+  const { add: addSeller } = useFirestore<Seller>('sellers');
 
   const resetForm = () => {
     setFormData({
@@ -32,6 +43,29 @@ const PurchaseManagement: React.FC = () => {
     });
     setEditingPurchase(null);
     setShowForm(false);
+  };
+
+  const resetSellerForm = () => {
+    setSellerFormData({ name: '', phone: '', address: '', email: '' });
+    setShowSellerForm(false);
+  };
+
+  const handleAddSeller = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const newSeller = await addSeller({
+        ...sellerFormData,
+        totalPurchased: 0,
+        totalPaid: 0,
+        totalDue: 0,
+      });
+      toast.success('Seller added successfully');
+      resetSellerForm();
+      // Auto-select the new seller
+      setFormData({ ...formData, sellerId: newSeller.id });
+    } catch (error) {
+      toast.error('Failed to add seller');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -134,19 +168,18 @@ const PurchaseManagement: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Seller *</label>
-                <select
-                  required
+                <SearchableSelect
+                  options={sellers.map(seller => ({
+                    id: seller.id,
+                    name: seller.name,
+                    phone: seller.phone
+                  }))}
                   value={formData.sellerId}
-                  onChange={(e) => setFormData({ ...formData, sellerId: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                >
-                  <option value="">Select Seller</option>
-                  {sellers.map((seller) => (
-                    <option key={seller.id} value={seller.id}>
-                      {seller.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setFormData({ ...formData, sellerId: value })}
+                  placeholder="Select Seller"
+                  onAddNew={() => setShowSellerForm(true)}
+                  addNewLabel="Add New Seller"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Quantity (pieces) *</label>
@@ -222,6 +255,71 @@ const PurchaseManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={resetForm}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Seller Form Modal */}
+      {showSellerForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Add New Seller</h3>
+            <form onSubmit={handleAddSeller} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={sellerFormData.name}
+                  onChange={(e) => setSellerFormData({ ...sellerFormData, name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                <input
+                  type="tel"
+                  required
+                  value={sellerFormData.phone}
+                  onChange={(e) => setSellerFormData({ ...sellerFormData, phone: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
+                <textarea
+                  required
+                  value={sellerFormData.address}
+                  onChange={(e) => setSellerFormData({ ...sellerFormData, address: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={sellerFormData.email}
+                  onChange={(e) => setSellerFormData({ ...sellerFormData, email: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 bg-yellow-600 text-white py-2 rounded-lg hover:bg-yellow-700"
+                >
+                  Add Seller
+                </button>
+                <button
+                  type="button"
+                  onClick={resetSellerForm}
                   className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
                 >
                   Cancel
